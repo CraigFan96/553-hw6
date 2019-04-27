@@ -1,0 +1,45 @@
+JEREMY SASLAW - saslawje@seas.upenn.edu
+YASH VARDHAN - yashv@seas.upenn.edu
+
+What types of messages does your jukebox protocol send, and what do they mean?
+
+- SETUP: Obtain the URL of the data and describe the data (length of bitstream for file, name, characteristics, etc.) and also describe how to transport the bistream
+
+- LIST: Obtain a list of songs that are available along with their ID numbers
+
+- PLAY: Begin playing the song with the ID and handle case if another song is playing
+
+- STOP: Stop playing the current song
+
+- SHUTDOWN: Kill the connection
+
+
+How are your messages formatted?  Are they text or binary, and what does the header look like?  How do you determine where one message ends and another begins?
+
+- Packet format: chunk ID (specific to each message), type (message type), length of header, length of message, checksum (for verification, will include everything including length), source (IP), destination (IP), message-specific information (based on type: e.g. play would have which ID to play, etc.)
+
+- Binary type
+
+- Based on the length of header, we will know when the message begins, and based on (length of message - length of header), we will know when file ends
+
+
+What type of state does the server need to store per-client?  What does that state mean (e.g., the fields in the client struct)?
+
+- Server will store a cookie which is pretty much a table, that designates for each connected client whether it is:
+
+IDLE (-1)
+PLAYING (song ID)
+
+- Initialize each given client struct based on the above information.  Additionally, the struct will hold the client IP
+
+
+How do messages transition the client/server from one state to another?
+
+- When the server receives messages such PLAY, STOP, it can transition within its struct for that given client the state, as described above
+
+
+Anything else I should know about the way it works?
+
+- We're considering breaking up a stream into segments/chunks, like DASH
+- Will be implemented probably on top of UDP
+- Since UDP doesn't have ACK, we'll have to implement a form of timeout to ensure proper handling of receiving of messages (chunk IDs will be utilized to distinguish between each message)
