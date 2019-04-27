@@ -7,7 +7,10 @@ import socket
 import struct
 import sys
 import threading
+import cPickle as pickle
 from time import sleep
+
+RECV_BUFFER_SIZE = 1024
 
 # The Mad audio library we're using expects to be given a file object, but
 # we're not dealing with files, we're reading audio data over the network.  We
@@ -35,7 +38,28 @@ class mywrapper(object):
 # it too!
 def recv_thread_func(wrap, cond_filled, sock):
     while True:
-        # TODO
+        
+        recv_string = ""
+
+        while True:
+            try:
+                data = sock.recv(RECV_BUFFER_SIZE)
+                print(data)
+            except:
+                print("Couldn't read")
+            if data:
+                print(data)
+                recv_string += data
+            else:
+                print("done")
+                break
+
+        print("hi")
+        print(pickle.loads(recv_string))
+
+
+
+
         pass
 
 
@@ -93,6 +117,8 @@ def main():
     # go backwards, etc.).
     while True:
         line = raw_input('>> ')
+
+        # sock.sendall(line)
 
         if ' ' in line:
             cmd, args = line.split(' ', 1)
