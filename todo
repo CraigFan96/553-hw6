@@ -1,0 +1,7 @@
+- Implement STOP: send stop request from client to server, client sends empty data string to MAD, server stops sending data
+
+- Implement LIST: just update what we already wrote with new variables
+
+- Implement SIGINT hanlding for client that exits
+
+- Figure out stupid bug

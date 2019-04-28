@@ -67,8 +67,9 @@ def client_write(client, lock):
                 client.conn.sendall(pickle.dumps(packet))
 
             # Tell client to wait for next command
+            lock.acquire()
             client.status = "wait"
-      
+            lock.release()
 
         if client.status == "play":
             
@@ -104,23 +105,27 @@ def client_write(client, lock):
 
                 time_start = time.time()
                 time_end = time.time()
-                while (client.wait_for_ack and (time_end-time_start) < TIMEOUT):
+                while (client.wait_for_ack and ((time_end-time_start) < TIMEOUT)):
                     time_end=time.time()
 
                 # If the timeout occured
-                if (time_end - time_start) > TIMEOUT:
+                print(str(time_end-time_start) + "      " + str(TIMEOUT))
+                if (time_end - time_start) >= TIMEOUT:
                     continue;
 
                 # Else we received an ACK
                 if client.rec_seq == client.send_seq+1:
+                    print("hi")
                     lock.acquire()
                     client.send_seq = client.rec_seq
                     lock.release()
                 else:
                     continue
 
+            lock.acquire()
             client.status = "wait"
-
+            lock.release()
+    
 # TODO: Thread that receives commands from the client.  All recv() calls should
 # be contained in this function.
 def client_read(client, lock):

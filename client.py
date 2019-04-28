@@ -85,7 +85,7 @@ def recv_thread_func(wrap, cond_filled, sock):
                     wrap.data += recv_string
                     if wrap.mf == None:
                         wrap.mf = mad.MadFile(wrap)
-
+                    
                     recv_string = ""
                     buf_count = 0
 
