@@ -1,7 +1,5 @@
 - Bug: client: "play 0", "play 0", "stop" doesn't stop
-
-- Implement LIST: just update what we already wrote with new variables
-
-- Implement SIGINT hanlding for client that exits
+- Bug: client: "play 0", "list" doesn't work
+- Summary above: pretty much the issue is our main play (for) loop doesn't handle change of states within it
 
 - Figure out stupid bug
