@@ -45,7 +45,7 @@ def client_write(client, lock):
     while True:
 
         if client.status == "list":
-        
+            
             packet = {}
             packet["type"] = "server_list"
             
@@ -151,6 +151,9 @@ def client_read(client, lock):
         # Load data and create packet type
         data = client.conn.recv(SEND_BUFFER)
         packet = pickle.loads(data)
+
+        if packet["type"] == "client_shutdown":
+            break
 
         if packet["type"] == "client_request":
 

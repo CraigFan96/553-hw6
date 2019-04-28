@@ -174,6 +174,7 @@ def main():
     # module above, raw_input gives us nice shell-like behavior (up-arrow to
     # go backwards, etc.).
     while True:
+
         line = raw_input('>> ')
 
         if ' ' in line:
@@ -197,6 +198,9 @@ def main():
             request_type = 2
 
         if cmd in ['quit', 'q', 'exit']:
+            packet = {}
+            packet["type"] = "client_shutdown"
+            sock.sendall(pickle.dumps(packet)) 
             sys.exit(0)
 
         if request_type > -1:
@@ -208,6 +212,10 @@ def main():
             packet["last"] = True
             packet["seq"] = 0
             sock.sendall(pickle.dumps(packet)) 
+
+        # If LIST, then give time to list the list before prompting for new input
+        if request_type == 0:
+            sleep(0.2)
 
         request_type = -1
 
