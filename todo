@@ -1,4 +1,4 @@
-- Implement STOP: send stop request from client to server, client sends empty data string to MAD, server stops sending data
+- Bug: client: "play 0", "play 0", "stop" doesn't stop
 
 - Implement LIST: just update what we already wrote with new variables
 

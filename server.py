@@ -72,10 +72,11 @@ def client_write(client, lock):
             lock.release()
 
         if client.status == "play":
-            
+
             packet = {}
             packet["type"] = "server_song"
-            
+            starting_to_play_id = client.song_id
+
             # Create string of songlist
             f = open(sys.argv[2] + "/" + songlist[client.song_id])
             song_string = f.read()
@@ -83,7 +84,27 @@ def client_write(client, lock):
 
             # Send song of infinite size
             for i in xrange(0,len(song_string),SEND_BUFFER):
-                #print(i)
+
+                # Check if we get the STOP command or want to play a new song
+                if (client.status == "stop") or (client.song_id != starting_to_play_id):
+                   
+                    packet = {}
+                    packet["type"] = "server_stop"
+                    packet["last"] = True
+                    client.conn.sendall(pickle.dumps(packet))
+
+                    # Tell client to wait for next command
+                    lock.acquire()
+                    client.status = "wait"
+                    lock.release()
+
+                    # Case of new song
+                    if client.song_id != starting_to_play_id:
+                        client.status = "play"
+                        client.send_seq = 0
+                        client.rec_seq = -1
+
+                    break;
 
                 start_i = i
                 end_i = i+len(song_string[i:i+SEND_BUFFER])
@@ -109,23 +130,18 @@ def client_write(client, lock):
                     time_end=time.time()
 
                 # If the timeout occured
-                print(str(time_end-time_start) + "      " + str(TIMEOUT))
                 if (time_end - time_start) >= TIMEOUT:
                     continue;
 
                 # Else we received an ACK
                 if client.rec_seq == client.send_seq+1:
-                    print("hi")
                     lock.acquire()
                     client.send_seq = client.rec_seq
                     lock.release()
                 else:
                     continue
 
-            lock.acquire()
-            client.status = "wait"
-            lock.release()
-    
+
 # TODO: Thread that receives commands from the client.  All recv() calls should
 # be contained in this function.
 def client_read(client, lock):
@@ -149,8 +165,10 @@ def client_read(client, lock):
                 client.seq = 0
             elif request == 1:
                 client.status = "play"
-                client.song_id = int(packet["msg"][1:])
-                client.send_seq = 0
+                if int(packet["msg"][1:]) != client.song_id:
+                    client.song_id = int(packet["msg"][1:])
+                    client.send_seq = 0
+                    client.rec_seq = -1
             elif request == 2:
                 client.status = "stop"
             else:

@@ -48,7 +48,6 @@ def recv_thread_func(wrap, cond_filled, sock):
         try:
             data = sock.recv(20000)
             packet = pickle.loads(data)
-            print(packet["seq"])
         except:
             print("Couldn't read")
 
@@ -94,15 +93,22 @@ def recv_thread_func(wrap, cond_filled, sock):
                 break
 
         if packet["last"] == True:
-            print("hi") 
-           
 
-            wrap.data += recv_string
-            if wrap.mf == None:
-                wrap.mf = mad.MadFile(wrap)
+            if packet["type"] == "server_song":
+                wrap.data += recv_string
+                if wrap.mf == None:
+                    wrap.mf = mad.MadFile(wrap)
 
-            recv_string = ""
-            buf_count = 0
+                recv_string = ""
+                buf_count = 0
+
+            if packet["type"] == "server_stop":
+                wrap.data = ""
+                wrap.mp = None
+                recv_string = ""
+                buf_count = 0
+
+            
 
     pass
 
@@ -193,15 +199,17 @@ def main():
         if cmd in ['quit', 'q', 'exit']:
             sys.exit(0)
 
-        # Create packet to send        
-        packet = {}
-        packet["type"] = "client_request"
-        packet["msg"] = str(request_type)+str(request_arg)
-        packet["len"] = len(packet["msg"])
-        packet["last"] = True
-        packet["seq"] = 0
-        sock.sendall(pickle.dumps(packet)) 
+        if request_type > -1:
+            # Create packet to send        
+            packet = {}
+            packet["type"] = "client_request"
+            packet["msg"] = str(request_type)+str(request_arg)
+            packet["len"] = len(packet["msg"])
+            packet["last"] = True
+            packet["seq"] = 0
+            sock.sendall(pickle.dumps(packet)) 
 
+        request_type = -1
 
 if __name__ == '__main__':
     main()
