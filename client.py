@@ -11,6 +11,7 @@ import cPickle as pickle
 from time import sleep
 
 RECV_BUFFER_SIZE = 1024
+BUF_TO_STREAM = 1
 
 # The Mad audio library we're using expects to be given a file object, but
 # we're not dealing with files, we're reading audio data over the network.  We
@@ -37,30 +38,73 @@ class mywrapper(object):
 # the wrapper with synchronization, since the other thread is using
 # it too!
 def recv_thread_func(wrap, cond_filled, sock):
-    while True:
         
-        recv_string = ""
+    recv_string = ""
+    buf_count = 0
 
-        while True:
-            try:
-                data = sock.recv(RECV_BUFFER_SIZE)
-                print(data)
-            except:
-                print("Couldn't read")
+    while True:
+       
+        # Gather the packet
+        try:
+            data = sock.recv(20000)
+            packet = pickle.loads(data)
+            print(packet["seq"])
+        except:
+            print("Couldn't read")
+
+        # If list response
+        if packet["type"] == "server_list":
+
+            while True:
+
+                if data:
+                    recv_string += packet["msg"]
+                    if packet["last"] == True:
+                        break
+                else:
+                    break
+
+            for index, song_name in pickle.loads(recv_string).iteritems():
+                print(str(index) + ": " + song_name)
+       
+        # If list response
+        if packet["type"] == "server_song":
+
             if data:
-                print(data)
-                recv_string += data
+                recv_string += packet["msg"]
+                buf_count += 1
+
+                packet["type"] = "client_ack"
+                packet["seq"] = packet["seq"] + 1
+                packet["msg"] = ""
+                packet["len"] = len(packet["msg"])
+                sock.sendall(pickle.dumps(packet))
+                
+                if buf_count >= BUF_TO_STREAM:
+                    
+                    wrap.data += recv_string
+                    if wrap.mf == None:
+                        wrap.mf = mad.MadFile(wrap)
+
+                    recv_string = ""
+                    buf_count = 0
+
+
             else:
-                print("done")
                 break
 
-        print("hi")
-        print(pickle.loads(recv_string))
+        if packet["last"] == True:
+            print("hi") 
+           
 
+            wrap.data += recv_string
+            if wrap.mf == None:
+                wrap.mf = mad.MadFile(wrap)
 
+            recv_string = ""
+            buf_count = 0
 
-
-        pass
+    pass
 
 
 # If there is song data stored in the wrapper object, play it!
@@ -75,6 +119,14 @@ def play_thread_func(wrap, cond_filled, dev):
         buf = wrap.mf.read()
         dev.play(buffer(buf), len(buf))
         """
+
+        while True:
+            if wrap.mf:
+                buf = wrap.mf.read()
+                if buf is None:
+                    break
+                dev.play(buffer(buf), len(buf))
+
 
 
 def main():
@@ -118,25 +170,38 @@ def main():
     while True:
         line = raw_input('>> ')
 
-        # sock.sendall(line)
-
         if ' ' in line:
             cmd, args = line.split(' ', 1)
         else:
             cmd = line
 
-        # TODO: Send messages to the server when the user types things.
+        # Send messages to the server when the user types things.
+        request_arg = -1
         if cmd in ['l', 'list']:
             print 'The user asked for list.'
+            request_type = 0
 
         if cmd in ['p', 'play']:
             print 'The user asked to play:', args
+            request_type = 1
+            request_arg = args
 
         if cmd in ['s', 'stop']:
             print 'The user asked for stop.'
+            request_type = 2
 
         if cmd in ['quit', 'q', 'exit']:
             sys.exit(0)
+
+        # Create packet to send        
+        packet = {}
+        packet["type"] = "client_request"
+        packet["msg"] = str(request_type)+str(request_arg)
+        packet["len"] = len(packet["msg"])
+        packet["last"] = True
+        packet["seq"] = 0
+        sock.sendall(pickle.dumps(packet)) 
+
 
 if __name__ == '__main__':
     main()

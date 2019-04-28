@@ -6,10 +6,13 @@ import struct
 import sys
 import cPickle as pickle
 from threading import Lock, Thread
+import pdb, traceback
+import time
 
 
 QUEUE_LENGTH = 10
 SEND_BUFFER = 4096
+TIMEOUT = 0.01
 
 songlist = {}
 
@@ -20,8 +23,12 @@ class Client:
         self.conn = None
         self.addr = None
 
-        self.test_string = ""
-
+        self.status = "wait"        # wait, list, play, stop
+        self.song_id = -1           # Fill with song ID >= 0
+        self.last_received = False
+        self.send_seq = -1
+        self.rec_seq = -1
+        self.wait_for_ack = False
 
     def create_new_socket(self, conn, addr):
         self.conn = conn
@@ -33,21 +40,131 @@ class Client:
 # be passed to this thread through the associated Client object.  Make sure you
 # use locks or similar synchronization tools to ensure that the two threads play
 # nice with one another!
-def client_write(client):
+def client_write(client, lock):
     
-    client.conn.sendall(pickle.dumps(songlist, pickle.HIGHEST_PROTOCOL))
-    client.conn.sendall("")
+    while True:
 
+        if client.status == "list":
+        
+            packet = {}
+            packet["type"] = "server_list"
+            
+            # Create string of songlist
+            songlist_string = pickle.dumps(songlist)
+
+            # Send list of infinite size
+            for i in xrange(0,len(songlist_string),SEND_BUFFER):
+                
+                start_i = i
+                end_i = i+len(songlist_string[i:i+SEND_BUFFER])
+                packet["msg"] = songlist_string[start_i:end_i]
+                packet["len"] = len(packet["msg"])
+                if end_i == len(songlist_string):
+                    packet["last"] = True
+                else:
+                    packet["last"] = False
+
+                client.conn.sendall(pickle.dumps(packet))
+
+            # Tell client to wait for next command
+            client.status = "wait"
+      
+
+        if client.status == "play":
+            
+            packet = {}
+            packet["type"] = "server_song"
+            
+            # Create string of songlist
+            f = open(sys.argv[2] + "/" + songlist[client.song_id])
+            song_string = f.read()
+            f.close()
+
+            # Send song of infinite size
+            for i in xrange(0,len(song_string),SEND_BUFFER):
+                #print(i)
+
+                start_i = i
+                end_i = i+len(song_string[i:i+SEND_BUFFER])
+
+                packet["msg"] = song_string[start_i:end_i]
+                packet["len"] = len(packet["msg"])
+                packet["seq"] = client.send_seq
+
+                if end_i == len(song_string):
+                    packet["last"] = True
+                else:
+                    packet["last"] = False
+
+                client.conn.sendall(pickle.dumps(packet))
+                
+                lock.acquire()
+                client.wait_for_ack = True
+                lock.release()
+
+                time_start = time.time()
+                time_end = time.time()
+                while (client.wait_for_ack and (time_end-time_start) < TIMEOUT):
+                    time_end=time.time()
+
+                # If the timeout occured
+                if (time_end - time_start) > TIMEOUT:
+                    continue;
+
+                # Else we received an ACK
+                if client.rec_seq == client.send_seq+1:
+                    lock.acquire()
+                    client.send_seq = client.rec_seq
+                    lock.release()
+                else:
+                    continue
+
+            client.status = "wait"
 
 # TODO: Thread that receives commands from the client.  All recv() calls should
 # be contained in this function.
-def client_read(client):
+def client_read(client, lock):
     
     while True:
+
+        # Load data and create packet type
         data = client.conn.recv(SEND_BUFFER)
-        client.test_string = data
-        print(client.test_string)
-   
+        packet = pickle.loads(data)
+
+        if packet["type"] == "client_request":
+
+            request = int(packet["msg"][0]) 
+
+            # Lock client
+            lock.acquire()
+            
+            # Determine request type and fill song_id arg if necessary
+            if request == 0:
+                client.status = "list"
+                client.seq = 0
+            elif request == 1:
+                client.status = "play"
+                client.song_id = int(packet["msg"][1:])
+                client.send_seq = 0
+            elif request == 2:
+                client.status = "stop"
+            else:
+                print("Invalid client_request sent to server!")
+
+            # Release client
+            lock.release()
+
+        elif packet["type"] == "client_ack":
+            
+            # Lock client
+            lock.acquire()
+
+            client.wait_for_ack = False
+            client.rec_seq = packet["seq"]
+
+            # Release client
+            lock.release()
+
     return 0
 
 
@@ -97,13 +214,19 @@ def main():
         client = Client()
         client.create_new_socket(client_socket, addr)
 
-        t = Thread(target=client_read, args=(client,))
+        # Define lock on the client
+        lock = Lock()
+   
+        # Create client_read thread
+        t = Thread(target=client_read, args=(client, lock))
         threads.append(t)
         t.start()
 
-        t = Thread(target=client_write, args=(client,))
+        # Create client_write thread
+        t = Thread(target=client_write, args=(client, lock))
         threads.append(t)
         t.start()
+
     s.close()
 
 if __name__ == "__main__":

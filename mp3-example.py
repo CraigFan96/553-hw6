@@ -41,6 +41,8 @@ def main():
     # to the end of wrap.data in your receiver thread while the player thread
     # is removing and playing data from the front of it.
     wrap.data = data
+    print(len(wrap.data))
+
     wrap.mf = mad.MadFile(wrap)
 
     # Play the file.
