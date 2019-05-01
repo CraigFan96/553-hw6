@@ -13,6 +13,9 @@ from time import sleep
 RECV_BUFFER_SIZE = 1024
 BUF_TO_STREAM = 1
 
+current_song = -1
+number_of_songs = 0
+
 # The Mad audio library we're using expects to be given a file object, but
 # we're not dealing with files, we're reading audio data over the network.  We
 # use this object to trick it.  All it really wants from the file object is the
@@ -38,9 +41,19 @@ class mywrapper(object):
 # the wrapper with synchronization, since the other thread is using
 # it too!
 def recv_thread_func(wrap, cond_filled, sock):
-        
+    
+    global number_of_songs
+   
+
     recv_string = ""
     buf_count = 0
+
+    packet = {}
+    packet["type"] = "list_length_request"
+    sock.sendall(pickle.dumps(packet)) 
+    data = sock.recv(200)
+    packet = pickle.loads(data)
+    number_of_songs = int(packet["msg"])
 
     while True:
        
@@ -49,7 +62,23 @@ def recv_thread_func(wrap, cond_filled, sock):
             data = sock.recv(20000)
             packet = pickle.loads(data)
         except:
-            print("Couldn't read")
+            pass
+
+        if packet["type"] == "server_stop":
+            wrap.data = ""
+            wrap.mp = None
+            recv_string = ""
+            buf_count = 0
+
+        if packet["last"] == True:
+
+            if packet["type"] == "server_song":
+                wrap.data += recv_string
+                if wrap.mf == None:
+                    wrap.mf = mad.MadFile(wrap)
+
+                recv_string = ""
+                buf_count = 0
 
         # If list response
         if packet["type"] == "server_list":
@@ -91,22 +120,6 @@ def recv_thread_func(wrap, cond_filled, sock):
 
             else:
                 break
-
-        if packet["last"] == True:
-
-            if packet["type"] == "server_song":
-                wrap.data += recv_string
-                if wrap.mf == None:
-                    wrap.mf = mad.MadFile(wrap)
-
-                recv_string = ""
-                buf_count = 0
-
-            if packet["type"] == "server_stop":
-                wrap.data = ""
-                wrap.mp = None
-                recv_string = ""
-                buf_count = 0
 
             
 
@@ -170,6 +183,9 @@ def main():
     play_thread.daemon = True
     play_thread.start()
 
+    global current_song
+    global number_of_songs
+
     # Enter our never-ending user I/O loop.  Because we imported the readline
     # module above, raw_input gives us nice shell-like behavior (up-arrow to
     # go backwards, etc.).
@@ -193,9 +209,18 @@ def main():
             request_type = 1
             request_arg = args
 
+            if current_song != int(args) and int(args) < number_of_songs:
+                current_song = int(args)
+            else:
+                request_type = -1
+
+            if int(args) >= number_of_songs or int(args) < 0:
+                print("Please give a valid song number!  Use list if you'd like")
+
         if cmd in ['s', 'stop']:
             print 'The user asked for stop.'
             request_type = 2
+            current_song = -1
 
         if cmd in ['quit', 'q', 'exit']:
             packet = {}

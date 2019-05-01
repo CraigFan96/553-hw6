@@ -8,6 +8,7 @@ import cPickle as pickle
 from threading import Lock, Thread
 import pdb, traceback
 import time
+import signal
 
 
 QUEUE_LENGTH = 10
@@ -43,6 +44,14 @@ class Client:
 def client_write(client, lock):
     
     while True:
+
+        if client.status == "send_list_length":
+            packet = {}
+            packet["type"] = "list_length"
+            packet["msg"] = len(songlist)
+            packet["last"] = True
+            client.conn.sendall(pickle.dumps(packet))
+            client.status = "wait"
 
         if client.status == "list":
             
@@ -87,7 +96,7 @@ def client_write(client, lock):
 
                 # Check if we get the STOP command or want to play a new song
                 if (client.status == "stop") or (client.song_id != starting_to_play_id):
-                   
+                  
                     packet = {}
                     packet["type"] = "server_stop"
                     packet["last"] = True
@@ -118,8 +127,12 @@ def client_write(client, lock):
                 else:
                     packet["last"] = False
 
-                client.conn.sendall(pickle.dumps(packet))
-                
+                # We're checking if client is killed
+                try:
+                    client.conn.sendall(pickle.dumps(packet))
+                except:
+                    break
+
                 lock.acquire()
                 client.wait_for_ack = True
                 lock.release()
@@ -155,6 +168,9 @@ def client_read(client, lock):
         if packet["type"] == "client_shutdown":
             break
 
+        if packet["type"] == "list_length_request":
+            client.status = "send_list_length"
+
         if packet["type"] == "client_request":
 
             request = int(packet["msg"][0]) 
@@ -167,12 +183,14 @@ def client_read(client, lock):
                 client.status = "list"
                 client.seq = 0
             elif request == 1:
+
                 client.status = "play"
                 if int(packet["msg"][1:]) != client.song_id:
                     client.song_id = int(packet["msg"][1:])
                     client.send_seq = 0
                     client.rec_seq = -1
             elif request == 2:
+                
                 client.status = "stop"
             else:
                 print("Invalid client_request sent to server!")
@@ -214,6 +232,9 @@ def get_mp3s(musicdir):
     return songs, songlist
 
 def main():
+
+    signal.signal(signal.SIGINT, signal_handler)
+
     if len(sys.argv) != 3:
         sys.exit("Usage: python server.py [port] [musicdir]")
     if not os.path.isdir(sys.argv[2]):
@@ -221,6 +242,7 @@ def main():
 
     port = int(sys.argv[1])
     songs, songlist = get_mp3s(sys.argv[2])
+
 
     threads = []
 
@@ -254,6 +276,10 @@ def main():
         t.start()
 
     s.close()
+
+
+def signal_handler(sig, frame):
+    sys.exit(0)
 
 if __name__ == "__main__":
     main()
